@@ -6,115 +6,138 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>部品撮影ナビ</title>
 <style>
-body {
-  font-family: sans-serif;
-  background: #eaf4ff;
-  margin: 0;
-  padding: 16px;
-  color: #17212b;
-}
-h1 { font-size: 24px; }
-.card {
-  background: white;
-  border-radius: 14px;
-  padding: 16px;
-  margin: 12px 0;
-}
-input:not([type="checkbox"]):not([type="file"]),
-button {
-  width: 100%;
-  box-sizing: border-box;
-  font-size: 16px;
-  padding: 12px;
-  margin: 7px 0;
-}
-button {
-  background: #075fbd;
-  color: white;
-  border: 0;
-  border-radius: 8px;
-}
-#preview {
-  width: 100%;
-  margin-top: 10px;
-  border-radius: 8px;
-}
-.check { margin: 12px 0; }
+body{font-family:-apple-system,sans-serif;margin:0;padding:18px;background:#f3f5f7;color:#222}
+h1{font-size:24px}
+.card{background:white;padding:16px;border-radius:14px;margin:14px 0}
+input,button{font-size:16px;box-sizing:border-box;width:100%;padding:13px;margin:7px 0;border-radius:9px}
+input{border:1px solid #bbb}
+button{border:0;background:#075ee8;color:white;font-weight:bold}
+button:disabled{background:#aaa}
+img{width:100%;height:auto;border-radius:8px;margin-top:10px}
+small{color:#666}
 </style>
 </head>
 <body>
 <h1>📸 部品撮影ナビ</h1>
 
 <div class="card">
-  <h2>部品情報</h2>
-  <label for="partId">部品番号</label>
-  <input id="partId" placeholder="例：BALIUS-001">
+<label>部品管理番号</label>
+<input id="partId" placeholder="例：P00123">
+<label>部品名</label>
+<input id="partName" placeholder="例：セルモーター">
 
-  <label for="partName">部品名</label>
-  <input id="partName" placeholder="例：セルモーター">
+<label>写真を撮る・選ぶ</label>
+<input id="photo" type="file" accept="image/*" capture="environment">
 
-  <button id="photoButton">📷 写真を撮る・選ぶ</button>
-  <input id="photo" type="file" accept="image/*" capture="environment" hidden>
-
-  <img id="preview" alt="選んだ写真のプレビュー" hidden>
-  <p id="status">部品番号を入力して写真を選んでな。</p>
+<div id="previewArea" hidden>
+<h3>撮影した写真</h3>
+<img id="preview" alt="撮影した写真">
+</div>
 </div>
 
 <div class="card">
-  <h2>撮影チェック</h2>
-  <label class="check"><input type="checkbox"> 全体</label><br>
-  <label class="check"><input type="checkbox"> 品番・刻印</label><br>
-  <label class="check"><input type="checkbox"> 接続部</label><br>
-  <label class="check"><input type="checkbox"> 傷・汚れ</label><br>
-  <label class="check"><input type="checkbox"> 裏側・別角度</label>
+<h3>写真チェック</h3>
+<label><input type="checkbox"> 全体</label>
+<label><input type="checkbox"> 品番・刻印</label>
+<label><input type="checkbox"> 接続部分</label>
+<label><input type="checkbox"> 傷・汚れ</label>
+<label><input type="checkbox"> 裏側・別角度</label>
 </div>
 
 <div class="card">
-  <h2>写真を保存</h2>
-  <button id="downloadButton">写真をダウンロード</button>
-  <p>※選んだ写真を端末に保存するための試作機能やで。</p>
+<h3>番号入り写真を作る</h3>
+<p><small>管理番号を写真の左上に合成するで。</small></p>
+<button id="make" disabled>番号を写真に入れる</button>
+<div id="resultArea" hidden>
+<img id="result" alt="番号入り写真">
+<button id="download">番号入り写真をダウンロード</button>
 </div>
+</div>
+
+<canvas id="canvas" hidden></canvas>
 
 <script>
-const photoInput = document.getElementById('photo');
+const photo = document.getElementById('photo');
 const preview = document.getElementById('preview');
-const statusText = document.getElementById('status');
+const previewArea = document.getElementById('previewArea');
+const make = document.getElementById('make');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let image = new Image();
+let ready = false;
+let outputUrl = '';
 
-document.getElementById('photoButton').addEventListener('click', () => {
+photo.addEventListener('change', () => {
+  const file = photo.files && photo.files[0];
+  if (!file) return;
+  if (outputUrl) URL.revokeObjectURL(outputUrl);
+  outputUrl = '';
+  ready = false;
+  document.getElementById('resultArea').hidden = true;
+  const url = URL.createObjectURL(file);
+  image = new Image();
+  image.onload = () => {
+    preview.src = url;
+    previewArea.hidden = false;
+    make.disabled = false;
+    ready = true;
+  };
+  image.onerror = () => alert('写真を読み込めへんかった。別の写真で試してな。');
+  image.src = url;
+});
+
+make.addEventListener('click', () => {
+  if (!ready) return;
   const id = document.getElementById('partId').value.trim();
   if (!id) {
-    alert('先に部品番号を入力してな。');
+    alert('先に部品管理番号を入力してな。');
     document.getElementById('partId').focus();
     return;
   }
-  photoInput.click();
+
+  const w = image.naturalWidth;
+  const h = image.naturalHeight;
+  canvas.width = w;
+  canvas.height = h;
+  ctx.drawImage(image, 0, 0, w, h);
+
+  const scale = Math.max(1, w / 900);
+  const pad = 18 * scale;
+  const fontSize = Math.max(24, Math.round(w * 0.045));
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const label = id;
+  const boxW = ctx.measureText(label).width + pad * 2;
+  const boxH = fontSize + pad * 1.4;
+
+  ctx.fillStyle = '#087cf0';
+  ctx.fillRect(0, 0, boxW, boxH);
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, pad, boxH / 2);
+
+  canvas.toBlob(blob => {
+    if (!blob) {
+      alert('写真の作成に失敗したで。もう一度試してな。');
+      return;
+    }
+    if (outputUrl) URL.revokeObjectURL(outputUrl);
+    outputUrl = URL.createObjectURL(blob);
+    document.getElementById('result').src = outputUrl;
+    document.getElementById('resultArea').hidden = false;
+  }, 'image/jpeg', 0.92);
 });
 
-photoInput.addEventListener('change', () => {
-  const file = photoInput.files[0];
-  if (!file) return;
-
-  preview.src = URL.createObjectURL(file);
-  preview.hidden = false;
-
-  const id = document.getElementById('partId').value.trim();
-  const name = document.getElementById('partName').value.trim() || '部品名未入力';
-  statusText.textContent = '部品番号：' + id + ' ／ 部品名：' + name + ' ／ 写真を読み込みました';
-});
-
-document.getElementById('downloadButton').addEventListener('click', () => {
-  if (!photoInput.files[0]) {
-    alert('先に写真を選んでな。');
-    return;
-  }
-
-  const id = document.getElementById('partId').value.trim() || 'part';
-  const link = document.createElement('a');
-  link.href = preview.src;
-  link.download = id + '.jpg';
-  link.click();
+document.getElementById('download').addEventListener('click', () => {
+  if (!outputUrl) return;
+  const id = document.getElementById('partId').value.trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_') || 'part';
+  const a = document.createElement('a');
+  a.href = outputUrl;
+  a.download = id + '.jpg';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 });
 </script>
 </body>
 </html>
-
