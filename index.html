@@ -1,1 +1,120 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>部品撮影ナビ</title>
+<style>
+body {
+  font-family: sans-serif;
+  background: #eaf4ff;
+  margin: 0;
+  padding: 16px;
+  color: #17212b;
+}
+h1 { font-size: 24px; }
+.card {
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  margin: 12px 0;
+}
+input:not([type="checkbox"]):not([type="file"]),
+button {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 16px;
+  padding: 12px;
+  margin: 7px 0;
+}
+button {
+  background: #075fbd;
+  color: white;
+  border: 0;
+  border-radius: 8px;
+}
+#preview {
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 8px;
+}
+.check { margin: 12px 0; }
+</style>
+</head>
+<body>
+<h1>📸 部品撮影ナビ</h1>
+
+<div class="card">
+  <h2>部品情報</h2>
+  <label for="partId">部品番号</label>
+  <input id="partId" placeholder="例：BALIUS-001">
+
+  <label for="partName">部品名</label>
+  <input id="partName" placeholder="例：セルモーター">
+
+  <button id="photoButton">📷 写真を撮る・選ぶ</button>
+  <input id="photo" type="file" accept="image/*" capture="environment" hidden>
+
+  <img id="preview" alt="選んだ写真のプレビュー" hidden>
+  <p id="status">部品番号を入力して写真を選んでな。</p>
+</div>
+
+<div class="card">
+  <h2>撮影チェック</h2>
+  <label class="check"><input type="checkbox"> 全体</label><br>
+  <label class="check"><input type="checkbox"> 品番・刻印</label><br>
+  <label class="check"><input type="checkbox"> 接続部</label><br>
+  <label class="check"><input type="checkbox"> 傷・汚れ</label><br>
+  <label class="check"><input type="checkbox"> 裏側・別角度</label>
+</div>
+
+<div class="card">
+  <h2>写真を保存</h2>
+  <button id="downloadButton">写真をダウンロード</button>
+  <p>※選んだ写真を端末に保存するための試作機能やで。</p>
+</div>
+
+<script>
+const photoInput = document.getElementById('photo');
+const preview = document.getElementById('preview');
+const statusText = document.getElementById('status');
+
+document.getElementById('photoButton').addEventListener('click', () => {
+  const id = document.getElementById('partId').value.trim();
+  if (!id) {
+    alert('先に部品番号を入力してな。');
+    document.getElementById('partId').focus();
+    return;
+  }
+  photoInput.click();
+});
+
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files[0];
+  if (!file) return;
+
+  preview.src = URL.createObjectURL(file);
+  preview.hidden = false;
+
+  const id = document.getElementById('partId').value.trim();
+  const name = document.getElementById('partName').value.trim() || '部品名未入力';
+  statusText.textContent = '部品番号：' + id + ' ／ 部品名：' + name + ' ／ 写真を読み込みました';
+});
+
+document.getElementById('downloadButton').addEventListener('click', () => {
+  if (!photoInput.files[0]) {
+    alert('先に写真を選んでな。');
+    return;
+  }
+
+  const id = document.getElementById('partId').value.trim() || 'part';
+  const link = document.createElement('a');
+  link.href = preview.src;
+  link.download = id + '.jpg';
+  link.click();
+});
+</script>
+</body>
+</html>
+
