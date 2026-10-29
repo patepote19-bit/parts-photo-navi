@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>部品撮影ナビ</title>
+
+<style>
+
+body{font-family:sans-serif;background:#eef5fa;margin:0;padding:16px;color:#17212b}
+
+h1{font-size:24px}
+
+.card{background:white;border-radius:14px;padding:16px;margin:12px 0}
+
+input,button{font-size:16px;padding:12px;margin:5px 0;box-sizing:border-box;width:100%}
+
+button{background:#075fbd;color:white;border:0;border-radius:8px}
+
+#preview{width:100%;margin-top:10px}
+
+small{color:#536273}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>📸 部品撮影ナビ</h1>
+
+<div class="card">
+
+<label>部品番号</label>
+
+<input id="partId" placeholder="例：BALIUS-001">
+
+<label>部品名</label>
+
+<input id="partName" placeholder="例：セルモーター">
+
+<button onclick="startPhoto()">写真を撮る・選ぶ</button>
+
+<input id="photo" type="file" accept="image/*" capture="environment" hidden>
+
+<div id="status">部品番号と部品名を入力して写真を選んでな。</div>
+
+<img id="preview" alt="選択した写真">
+
+</div>
+
+<div class="card">
+
+<h3>撮影チェック</h3>
+
+<label><input type="checkbox" style="width:auto"> 全体</label><br>
+
+<label><input type="checkbox" style="width:auto"> 品番・刻印</label><br>
+
+<label><input type="checkbox" style="width:auto"> 接続部</label><br>
+
+<label><input type="checkbox" style="width:auto"> 傷・汚れ</label><br>
+
+<label><input type="checkbox" style="width:auto"> 裏側・別角度</label>
+
+</div>
+
+<script>
+
+function startPhoto(){
+
+ const id=document.getElementById('partId').value.trim();
+
+ if(!id){alert('先に部品番号を入力してな');return;}
+
+ document.getElementById('photo').click();
+
+}
+
+document.getElementById('photo').addEventListener('change',function(){
+
+ const f=this.files[0];
+
+ if(!f)return;
+
+ document.getElementById('preview').src=URL.createObjectURL(f);
+
+ document.getElementById('status').textContent=
+
+ '部品番号：'+document.getElementById('partId').value+
+
+ ' ／ '+(document.getElementById('partName').value||'部品名未入力')+
+
+ ' ／ 写真を読み込みました';
+
+});
+
+</script>
+
+</body>
+
+</html>
