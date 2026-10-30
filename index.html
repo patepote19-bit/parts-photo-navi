@@ -312,9 +312,12 @@ $("uploadPhoto").onclick = async () => {
     document.querySelectorAll(".photoCheck:checked")
   ).map(el => el.value);
 
-  const suffix = category.length
-    ? category.join("_").replace(/[^\p{L}\p{N}_-]/gu, "")
-    : "写真";
+const suffix = category.length
+  ? "photo_" + category.length
+  : "photo";
+
+const filename = `${Date.now()}_${suffix}.jpg`;
+const path = `${currentUser.id}/${encodeURIComponent(partId)}/${filename}`;
 
   const filename = `${Date.now()}_${suffix}.jpg`;
   const path = `${currentUser.id}/${partId}/${filename}`;
