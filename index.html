@@ -21,224 +21,365 @@ label{display:block;margin:9px 0} .checks label{display:inline-block;margin-righ
 <h1>📸 部品撮影ナビ</h1>
 
 <div class="card" id="authCard">
-  <h3>ログイン</h3>
-  <p class="muted">Supabaseに登録済みのメールアドレスとパスワードを入力してな。</p>
-  <label>メールアドレス</label>
-  <input id="email" type="email" autocomplete="username" placeholder="メールアドレス">
-  <label>パスワード</label>
-  <input id="password" type="password" autocomplete="current-password" placeholder="パスワード">
-  <button id="loginButton">ログイン</button>
-  <div id="authMessage" class="status" role="status">ログインすると部品データを保存・表示できるで。</div>
+<h3>ログイン</h3>
+<p class="muted">Supabaseに登録済みのメールアドレスとパスワードを入力してな。</p>
+<label>メールアドレス</label>
+<input id="email" type="email" autocomplete="username" placeholder="メールアドレス">
+<label>パスワード</label>
+<input id="password" type="password" autocomplete="current-password" placeholder="パスワード">
+<button id="loginButton">ログイン</button>
+<div id="authMessage" class="status">ログインすると部品データを保存・表示できるで。</div>
 </div>
 
 <div id="appArea" hidden>
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <strong>ログイン中</strong><button id="logoutButton" class="secondary" style="width:auto">ログアウト</button>
-    </div>
-    <div id="userLabel" class="muted"></div>
-  </div>
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+<strong>ログイン中</strong><button id="logoutButton" class="secondary" style="width:auto">ログアウト</button>
+</div>
+<div id="userLabel" class="muted"></div>
+</div>
 
-  <div class="card">
-    <h3>部品情報</h3>
-    <label>部品管理番号</label>
-    <input id="partId" placeholder="例：P00123">
-    <label>部品名</label>
-    <input id="partName" placeholder="例：セルモーター">
-    <label>写真を撮る・選ぶ</label>
-    <input id="photo" type="file" accept="image/*" capture="environment">
-    <div id="previewArea" hidden>
-      <h3>撮影した写真</h3>
-      <img id="preview" alt="撮影した写真">
-    </div>
-  </div>
+<div class="card">
+<h3>部品情報</h3>
+<label>部品管理番号</label>
+<input id="partId" placeholder="例：P00123">
+<label>部品名</label>
+<input id="partName" placeholder="例：セルモーター">
+<label>写真を撮る・選ぶ</label>
+<input id="photo" type="file" accept="image/*" capture="environment">
+<div id="previewArea" hidden>
+<h3>撮影した写真（自動圧縮）</h3>
+<img id="preview" alt="撮影した写真">
+<div id="compressionInfo" class="muted"></div>
+</div>
+</div>
 
-  <div class="card checks">
-    <h3>写真チェック</h3>
-    <label><input type="checkbox" class="photoCheck" value="全体"> 全体</label>
-    <label><input type="checkbox" class="photoCheck" value="品番・刻印"> 品番・刻印</label>
-    <label><input type="checkbox" class="photoCheck" value="接続部分"> 接続部分</label>
-    <label><input type="checkbox" class="photoCheck" value="傷・汚れ"> 傷・汚れ</label>
-    <label><input type="checkbox" class="photoCheck" value="裏側・別角度"> 裏側・別角度</label>
-  </div>
+<div class="card checks">
+<h3>写真チェック</h3>
+<label><input type="checkbox" class="photoCheck" value="全体"> 全体</label>
+<label><input type="checkbox" class="photoCheck" value="品番・刻印"> 品番・刻印</label>
+<label><input type="checkbox" class="photoCheck" value="接続部分"> 接続部分</label>
+<label><input type="checkbox" class="photoCheck" value="傷・汚れ"> 傷・汚れ</label>
+<label><input type="checkbox" class="photoCheck" value="裏側・別角度"> 裏側・別角度</label>
+</div>
 
-  <div class="card">
-    <h3>番号入り写真を作る</h3>
-    <p><small>管理番号を写真の左上に合成するで。</small></p>
-    <button id="make" disabled>番号を写真に入れる</button>
-    <div id="resultArea" hidden>
-      <img id="result" alt="番号入り写真">
-      <button id="download">番号入り写真をダウンロード</button>
-    </div>
-  </div>
+<div class="card">
+<h3>番号入り写真を作る</h3>
+<p><small>管理番号を写真の左上に合成するで。</small></p>
+<button id="make" disabled>番号を写真に入れる</button>
+<div id="resultArea" hidden>
+<img id="result" alt="番号入り写真">
+<button id="download">番号入り写真をダウンロード</button>
+</div>
+</div>
 
-  <div class="card">
-    <h3>部品データを保存</h3>
-    <p class="muted">今回は部品番号・部品名・状態をSupabaseに保存するで。写真ファイルのクラウド保存は次の段階で追加する。</p>
-    <button id="savePart">部品データを保存</button>
-    <div id="saveMessage" class="status" role="status">保存待ち</div>
-  </div>
+<div class="card">
+<h3>部品データ・写真を保存</h3>
+<p class="muted">部品情報はpartsテーブルへ、写真は非公開のparts-photosへ保存するで。写真は長辺2048px以内・JPEG画質85%を目安に自動圧縮する。</p>
+<button id="savePart">部品データを保存</button>
+<button id="uploadPhoto" class="secondary" disabled>写真をクラウドへ保存</button>
+<div id="saveMessage" class="status">保存待ち</div>
+</div>
 
-  <div class="card">
-    <h3>登録済み部品</h3>
-    <button id="reloadParts" class="secondary">一覧を更新</button>
-    <div id="partsList" class="muted">読み込み待ち</div>
-  </div>
+<div class="card">
+<h3>登録済み部品</h3>
+<button id="reloadParts" class="secondary">一覧を更新</button>
+<div id="partsList" class="muted">読み込み待ち</div>
+</div>
 </div>
 
 <canvas id="canvas" hidden></canvas>
-
 <script>
-const SUPABASE_URL = 'https://smvzvonjjencnjhijapl.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_qkAR8gHzumahoX_10QI1Yg_8DOa1wrS';
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_URL = "https://smvzvonjjencnjhijapl.supabase.co";
+const SUPABASE_KEY = "sb_publishable_qkAR8gHzumahoX_10QI1Yg_8DOa1wrS";
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let compressedBlob = null;
+let numberedBlob = null;
 
 const $ = id => document.getElementById(id);
-let image = new Image();
-let ready = false;
-let outputUrl = '';
-let sourceUrl = '';
 
-function showAuthMessage(message){ $('authMessage').textContent = message; }
-function showSaveMessage(message){ $('saveMessage').textContent = message; }
-
-async function updateSession(){
-  const { data, error } = await db.auth.getSession();
-  if(error){ showAuthMessage('ログイン状態を確認できへんかった：' + error.message); return; }
-  const session = data.session;
-  $('authCard').hidden = !!session;
-  $('appArea').hidden = !session;
-  if(session){
-    $('userLabel').textContent = session.user.email || '';
-    await loadParts();
-  }
+function message(id, text) {
+  $(id).textContent = text;
 }
 
-$('loginButton').addEventListener('click', async () => {
-  const email = $('email').value.trim();
-  const password = $('password').value;
-  if(!email || !password){ showAuthMessage('メールアドレスとパスワードを入力してな。'); return; }
-  $('loginButton').disabled = true;
-  showAuthMessage('ログイン中…');
-  const { error } = await db.auth.signInWithPassword({ email, password });
-  $('loginButton').disabled = false;
-  if(error){ showAuthMessage('ログインできませんでした：' + error.message); return; }
-  showAuthMessage('ログインしました。');
-  await updateSession();
-});
+function showApp(user) {
+  currentUser = user;
+  $("authCard").hidden = true;
+  $("appArea").hidden = false;
+  $("userLabel").textContent = user.email || user.id;
+  loadParts();
+}
 
-$('logoutButton').addEventListener('click', async () => {
-  const { error } = await db.auth.signOut();
-  if(error){ alert('ログアウトできませんでした：' + error.message); return; }
-  await updateSession();
-});
-
-db.auth.onAuthStateChange((_event, session) => {
-  $('authCard').hidden = !!session;
-  $('appArea').hidden = !session;
-  if(session){ $('userLabel').textContent = session.user.email || ''; }
-});
-
-$('photo').addEventListener('change', () => {
-  const file = $('photo').files && $('photo').files[0];
-  if(!file) return;
-  if(outputUrl) URL.revokeObjectURL(outputUrl);
-  if(sourceUrl) URL.revokeObjectURL(sourceUrl);
-  outputUrl = '';
-  ready = false;
-  $('resultArea').hidden = true;
-  sourceUrl = URL.createObjectURL(file);
-  image = new Image();
-  image.onload = () => {
-    $('preview').src = sourceUrl;
-    $('previewArea').hidden = false;
-    $('make').disabled = false;
-    ready = true;
-  };
-  image.onerror = () => alert('写真を読み込めへんかった。別の写真で試してな。');
-  image.src = sourceUrl;
-});
-
-$('make').addEventListener('click', () => {
-  if(!ready) return;
-  const id = $('partId').value.trim();
-  if(!id){ alert('先に部品管理番号を入力してな。'); $('partId').focus(); return; }
-  const w = image.naturalWidth, h = image.naturalHeight;
-  const canvas = $('canvas'), ctx = canvas.getContext('2d');
-  canvas.width = w; canvas.height = h;
-  ctx.drawImage(image, 0, 0, w, h);
-  const scale = Math.max(1, w / 900);
-  const pad = 18 * scale;
-  const fontSize = Math.max(24, Math.round(w * 0.045));
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  const boxW = ctx.measureText(id).width + pad * 2;
-  const boxH = fontSize + pad * 1.4;
-  ctx.fillStyle = '#087cf0'; ctx.fillRect(0, 0, boxW, boxH);
-  ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
-  ctx.fillText(id, pad, boxH / 2);
-  canvas.toBlob(blob => {
-    if(!blob){ alert('写真の作成に失敗したで。もう一度試してな。'); return; }
-    if(outputUrl) URL.revokeObjectURL(outputUrl);
-    outputUrl = URL.createObjectURL(blob);
-    $('result').src = outputUrl;
-    $('resultArea').hidden = false;
-  }, 'image/jpeg', 0.92);
-});
-
-$('download').addEventListener('click', () => {
-  if(!outputUrl) return;
-  const id = $('partId').value.trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'part';
-  const a = document.createElement('a');
-  a.href = outputUrl; a.download = id + '.jpg';
-  document.body.appendChild(a); a.click(); a.remove();
-});
-
-$('savePart').addEventListener('click', async () => {
-  const part_id = $('partId').value.trim();
-  const part_name = $('partName').value.trim();
-  if(!part_id){ showSaveMessage('部品管理番号を入力してな。'); $('partId').focus(); return; }
-  const { data: sessionData } = await db.auth.getSession();
-  if(!sessionData.session){ showSaveMessage('ログインし直してな。'); return; }
-  $('savePart').disabled = true;
-  showSaveMessage('保存中…');
-  const checks = [...document.querySelectorAll('.photoCheck:checked')].map(el => el.value);
-  const status = checks.length ? checks.join('・') : '未確認';
-  const { error } = await db.from('parts').insert({
-    part_id,
-    part_name: part_name || null,
-    status
-  });
-  $('savePart').disabled = false;
-  if(error){
-    showSaveMessage('保存できませんでした：' + error.message + '\n入力内容やテーブル設定を確認する必要があるで。');
+async function checkLogin() {
+  const { data, error } = await db.auth.getSession();
+  if (error) {
+    message("authMessage", error.message);
     return;
   }
-  showSaveMessage('保存できたで！');
-  await loadParts();
-});
+  if (data.session) showApp(data.session.user);
+}
 
-async function loadParts(){
-  $('partsList').textContent = '読み込み中…';
-  const { data, error } = await db.from('parts')
-    .select('part_id, part_name, status')
-    .order('part_id', { ascending: true });
-  if(error){ $('partsList').textContent = '読み込めませんでした：' + error.message; return; }
-  if(!data || data.length === 0){ $('partsList').textContent = 'まだ部品データは登録されていません。'; return; }
-  $('partsList').innerHTML = '';
+$("loginButton").onclick = async () => {
+  const email = $("email").value.trim();
+  const password = $("password").value;
+
+  if (!email || !password) {
+    message("authMessage", "メールアドレスとパスワードを入力してな。");
+    return;
+  }
+
+  $("loginButton").disabled = true;
+  message("authMessage", "ログイン中...");
+
+  const { data, error } = await db.auth.signInWithPassword({
+    email, password
+  });
+
+  $("loginButton").disabled = false;
+
+  if (error) {
+    message("authMessage", "ログインできませんでした：" + error.message);
+    return;
+  }
+
+  showApp(data.user);
+};
+
+$("logoutButton").onclick = async () => {
+  await db.auth.signOut();
+  currentUser = null;
+  $("appArea").hidden = true;
+  $("authCard").hidden = false;
+  message("authMessage", "ログアウトしました。");
+};
+
+function resetPhotoResult() {
+  compressedBlob = null;
+  numberedBlob = null;
+  $("previewArea").hidden = true;
+  $("resultArea").hidden = true;
+  $("make").disabled = true;
+  $("uploadPhoto").disabled = true;
+}
+
+$("photo").onchange = async event => {
+  resetPhotoResult();
+
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    message("saveMessage", "画像ファイルを選んでな。");
+    return;
+  }
+
+  message("saveMessage", "写真を圧縮中...");
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxEdge = 2048;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    compressedBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error("JPEG圧縮に失敗しました"));
+      }, "image/jpeg", 0.85);
+    });
+
+    $("preview").src = URL.createObjectURL(compressedBlob);
+    $("previewArea").hidden = false;
+    $("compressionInfo").textContent =
+      `${width}×${height}px ／ ${(file.size / 1024).toFixed(0)}KB → ${(compressedBlob.size / 1024).toFixed(0)}KB`;
+
+    $("make").disabled = false;
+    $("uploadPhoto").disabled = false;
+    message("saveMessage", "圧縮完了。部品番号を確認してな。");
+  } catch (error) {
+    message("saveMessage", "写真処理エラー：" + error.message);
+  }
+};
+
+$("make").onclick = async () => {
+  if (!compressedBlob) return;
+
+  const partId = $("partId").value.trim();
+  if (!partId) {
+    message("saveMessage", "先に部品管理番号を入力してな。");
+    return;
+  }
+
+  const img = new Image();
+  img.src = URL.createObjectURL(compressedBlob);
+
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+  });
+
+  const canvas = $("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+
+  const fontSize = Math.max(24, Math.round(canvas.width * 0.035));
+  const padding = Math.round(fontSize * 0.5);
+
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const textWidth = ctx.measureText(partId).width;
+
+  ctx.fillStyle = "rgba(0,0,0,0.72)";
+  ctx.fillRect(0, 0, textWidth + padding * 2, fontSize + padding * 2);
+
+  ctx.fillStyle = "#fff";
+  ctx.textBaseline = "top";
+  ctx.fillText(partId, padding, padding);
+
+  numberedBlob = await new Promise(resolve =>
+    canvas.toBlob(resolve, "image/jpeg", 0.9)
+  );
+
+  $("result").src = URL.createObjectURL(numberedBlob);
+  $("resultArea").hidden = false;
+};
+
+$("download").onclick = () => {
+  if (!numberedBlob) return;
+
+  const partId = $("partId").value.trim() || "part";
+  const url = URL.createObjectURL(numberedBlob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = partId + "_番号入り.jpg";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+$("savePart").onclick = async () => {
+  if (!currentUser) return;
+
+  const partId = $("partId").value.trim();
+  const partName = $("partName").value.trim();
+
+  if (!partId) {
+    message("saveMessage", "部品管理番号を入力してな。");
+    return;
+  }
+
+  message("saveMessage", "部品データを保存中...");
+
+  const { error } = await db.from("parts").upsert({
+    part_id: partId,
+    part_name: partName || null,
+    status: "未撮影"
+  }, { onConflict: "part_id" });
+
+  if (error) {
+    message("saveMessage", "保存エラー：" + error.message);
+    return;
+  }
+
+  message("saveMessage", "部品データを保存したで。");
+  loadParts();
+};
+
+$("uploadPhoto").onclick = async () => {
+  if (!currentUser || !compressedBlob) return;
+
+  const partId = $("partId").value.trim();
+
+  if (!partId) {
+    message("saveMessage", "部品管理番号を入力してな。");
+    return;
+  }
+
+  const category = Array.from(
+    document.querySelectorAll(".photoCheck:checked")
+  ).map(el => el.value);
+
+  const suffix = category.length
+    ? category.join("_").replace(/[^\p{L}\p{N}_-]/gu, "")
+    : "写真";
+
+  const filename = `${Date.now()}_${suffix}.jpg`;
+  const path = `${currentUser.id}/${partId}/${filename}`;
+
+  message("saveMessage", "写真をクラウドへアップロード中...");
+
+  $("uploadPhoto").disabled = true;
+
+  const { error } = await db.storage
+    .from("parts-photos")
+    .upload(path, compressedBlob, {
+      contentType: "image/jpeg",
+      upsert: false
+    });
+
+  $("uploadPhoto").disabled = false;
+
+  if (error) {
+    message("saveMessage", "写真保存エラー：" + error.message);
+    return;
+  }
+
+  message("saveMessage", "写真をクラウドに保存したで！\n保存先：" + path);
+};
+
+async function loadParts() {
+  if (!currentUser) return;
+
+  message("partsList", "読み込み中...");
+
+  const { data, error } = await db.from("parts")
+    .select("part_id, part_name, status")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    message("partsList", "一覧取得エラー：" + error.message);
+    return;
+  }
+
+  $("partsList").replaceChildren();
+
+  if (!data || data.length === 0) {
+    message("partsList", "登録済み部品はまだないで。");
+    return;
+  }
+
   data.forEach(part => {
-    const item = document.createElement('div');
-    item.className = 'part';
-    const title = document.createElement('strong');
-    title.textContent = part.part_id || '';
-    const detail = document.createElement('div');
-    detail.textContent = (part.part_name || '部品名未入力') + ' ／ ' + (part.status || '状態未設定');
-    item.append(title, detail);
-    $('partsList').appendChild(item);
+    const div = document.createElement("div");
+    div.className = "part";
+
+    const strong = document.createElement("strong");
+    strong.textContent = part.part_id;
+
+    const detail = document.createElement("div");
+    detail.textContent =
+      `${part.part_name || "名称未入力"} ／ ${part.status || "状態未設定"}`;
+
+    div.append(strong, detail);
+    $("partsList").appendChild(div);
   });
 }
-$('reloadParts').addEventListener('click', loadParts);
 
-updateSession();
+$("reloadParts").onclick = loadParts;
+
+checkLogin();
 </script>
 </body>
 </html>
