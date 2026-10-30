@@ -316,11 +316,8 @@ const suffix = category.length
   ? "photo_" + category.length
   : "photo";
 
-const filename = `${Date.now()}_${suffix}.jpg`;
-const path = `${currentUser.id}/${encodeURIComponent(partId)}/${filename}`;
-
-  const filename = `${Date.now()}_${suffix}.jpg`;
-  const path = `${currentUser.id}/${partId}/${filename}`;
+const filename = `${Date.now()}_photo.jpg`;
+const path = `${currentUser.id}/${partId}/${filename}`;
 
   message("saveMessage", "写真をクラウドへアップロード中...");
 
