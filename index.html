@@ -106,6 +106,7 @@ let resultUrl = null;
 const galleryUrls = new Set();
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let wakeRecognition = null;
+let wakeRestartTimer = null;
 let voiceArmedUntil = 0;
 let voiceUnavailable = false;
 let voiceSpeaking = false;
@@ -126,7 +127,10 @@ function setVoiceStatus(text) {
 }
 
 function speakReply(text) {
-  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+    if (currentUser) scheduleWakeListening();
+    return;
+  }
   voiceSpeaking = true;
   if (wakeRecognition) wakeRecognition.stop();
   window.speechSynthesis.cancel();
@@ -139,7 +143,7 @@ function speakReply(text) {
     || null;
   reply.onend = reply.onerror = () => {
     voiceSpeaking = false;
-    if (currentUser && !voiceUnavailable) setTimeout(startWakeListening, 500);
+    scheduleWakeListening(500);
   };
   window.speechSynthesis.speak(reply);
 }
@@ -190,22 +194,33 @@ function queuePhotoCountLookup() {
   }, 400);
 }
 
+function scheduleWakeListening(delay = 700) {
+  if (!currentUser || voiceUnavailable) return;
+  clearTimeout(wakeRestartTimer);
+  wakeRestartTimer = setTimeout(() => {
+    wakeRestartTimer = null;
+    startWakeListening();
+  }, delay);
+}
+
 function startWakeListening() {
   if (!currentUser || voiceUnavailable) return;
+  if (wakeRecognition || voiceSpeaking) return;
   if (!SpeechRecognition) {
     setVoiceStatus("このブラウザーは呼びかけ音声に対応してへんみたいや。ChromeかEdgeで開いてな。");
     voiceUnavailable = true;
     return;
   }
 
-  wakeRecognition = new SpeechRecognition();
-  wakeRecognition.lang = "ja-JP";
-  wakeRecognition.continuous = true;
-  wakeRecognition.interimResults = false;
-  wakeRecognition.maxAlternatives = 1;
+  const recognition = new SpeechRecognition();
+  wakeRecognition = recognition;
+  recognition.lang = "ja-JP";
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
 
-  wakeRecognition.onstart = () => setVoiceStatus("「ナビ起動」って呼んでな。呼びかけ後の言葉を聞き取るで。");
-  wakeRecognition.onresult = event => {
+  recognition.onstart = () => setVoiceStatus("「ナビ起動」って呼んでな。呼びかけ後の言葉を聞き取るで。");
+  recognition.onresult = event => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (!event.results[i].isFinal) continue;
       const transcript = event.results[i][0].transcript.trim();
@@ -252,7 +267,7 @@ function startWakeListening() {
       }
     }
   };
-  wakeRecognition.onerror = event => {
+  recognition.onerror = event => {
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       voiceUnavailable = true;
       setVoiceStatus("マイクが許可されてへんで。ブラウザーのサイト設定でマイクを許可すると、「ナビ起動」で使えるで。");
@@ -261,13 +276,16 @@ function startWakeListening() {
       speakReply("ん？なんて言うた？もう一回頼むわ！");
     }
   };
-  wakeRecognition.onend = () => {
-    if (currentUser && !voiceUnavailable && !voiceSpeaking) setTimeout(startWakeListening, 700);
+  recognition.onend = () => {
+    if (wakeRecognition !== recognition) return;
+    wakeRecognition = null;
+    scheduleWakeListening();
   };
   try {
-    wakeRecognition.start();
+    recognition.start();
   } catch (error) {
-    setTimeout(startWakeListening, 1000);
+    if (wakeRecognition === recognition) wakeRecognition = null;
+    scheduleWakeListening(1200);
   }
 }
 
@@ -308,7 +326,6 @@ function showApp(user) {
   $("authCard").hidden = true;
   $("appArea").hidden = false;
   $("userLabel").textContent = user.email || user.id;
-  startWakeListening();
   speakReply("おう！今日もやろかー！");
   queuePhotoCountLookup();
   loadParts();
@@ -365,6 +382,8 @@ $("logoutButton").onclick = async () => {
     wakeRecognition.stop();
     wakeRecognition = null;
   }
+  clearTimeout(wakeRestartTimer);
+  wakeRestartTimer = null;
   await db.auth.signOut();
   $("appArea").hidden = true;
   $("authCard").hidden = false;
