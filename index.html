@@ -137,9 +137,11 @@ function speakReply(text) {
   const reply = new SpeechSynthesisUtterance(text);
   reply.lang = "ja-JP";
   reply.volume = 1;
+  reply.pitch = 0.82;
+  reply.rate = 0.94;
   const japaneseVoices = window.speechSynthesis.getVoices()
     .filter(voice => voice.lang.toLowerCase().startsWith("ja"));
-  reply.voice = japaneseVoices.find(voice => /(male|男性|ichiro|keita|daisuke|shota|takumi)/i.test(voice.name))
+  reply.voice = japaneseVoices.find(voice => /(male|男性|ichiro|keita|daisuke|shota|takumi|otoya)/i.test(voice.name))
     || japaneseVoices[0]
     || null;
   reply.onend = reply.onerror = () => {
