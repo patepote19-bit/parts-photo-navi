@@ -99,6 +99,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentUser = null;
 let compressedBlob = null;
 let numberedBlob = null;
+let numberedForPartId = null;
 let previewUrl = null;
 let resultUrl = null;
 const galleryUrls = new Set();
@@ -169,6 +170,7 @@ $("logoutButton").onclick = async () => {
 function resetPhotoResult() {
   compressedBlob = null;
   numberedBlob = null;
+  numberedForPartId = null;
   $("previewArea").hidden = true;
   $("resultArea").hidden = true;
   $("make").disabled = true;
@@ -269,6 +271,7 @@ $("make").onclick = async () => {
   numberedBlob = await new Promise((resolve, reject) =>
     canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("番号入り写真を作れませんでした")), "image/jpeg", 0.9)
   );
+  numberedForPartId = partId;
 
   if (resultUrl) URL.revokeObjectURL(resultUrl);
   resultUrl = URL.createObjectURL(numberedBlob);
@@ -276,10 +279,19 @@ $("make").onclick = async () => {
   $("resultArea").hidden = false;
 };
 
-$("download").onclick = () => {
-  if (!numberedBlob) return;
+$("partId").addEventListener("input", () => {
+  if (!numberedBlob || numberedForPartId === $("partId").value.trim()) return;
+  numberedBlob = null;
+  numberedForPartId = null;
+  if (resultUrl) URL.revokeObjectURL(resultUrl);
+  resultUrl = null;
+  $("resultArea").hidden = true;
+});
 
-  const partId = $("partId").value.trim() || "part";
+$("download").onclick = () => {
+  const partId = $("partId").value.trim();
+  if (!numberedBlob || numberedForPartId !== partId) return;
+
   const url = URL.createObjectURL(numberedBlob);
   const a = document.createElement("a");
   a.href = url;
@@ -315,11 +327,31 @@ $("savePart").onclick = async () => {
     ? (partName
         ? await db.from("parts").update({ part_name: partName }).eq("part_id", partId)
         : { error: null })
-    : await db.from("parts").insert({
-        part_id: partId,
-        part_name: partName || null,
-        status: "未撮影"
-      });
+    : await (async () => {
+        const { data: memberships, error: membershipError } = await db.from("workspace_members")
+          .select("workspace_id, role")
+          .eq("user_id", currentUser.id)
+          .in("role", ["admin", "manager", "staff"])
+          .limit(2);
+
+        if (membershipError) {
+          return { error: new Error("作業スペースを確認できませんでした。保存は行っていません。") };
+        }
+        if (!memberships || memberships.length === 0) {
+          return { error: new Error("登録できる作業スペースが見つかりませんでした。保存は行っていません。") };
+        }
+        if (memberships.length > 1) {
+          return { error: new Error("所属先が複数あります。保存先を選べるようにするまで、新規登録は行いません。") };
+        }
+
+        return db.from("parts").insert({
+          part_id: partId,
+          part_name: partName || null,
+          status: "未撮影",
+          user_id: currentUser.id,
+          workspace_id: memberships[0].workspace_id
+        });
+      })();
 
   const { error } = saveResult;
 
@@ -356,7 +388,8 @@ $("uploadPhoto").onclick = async () => {
 
   $("uploadPhoto").disabled = true;
 
-  const photoBlob = numberedBlob || compressedBlob;
+  const useNumberedPhoto = Boolean(numberedBlob && numberedForPartId === partId);
+  const photoBlob = useNumberedPhoto ? numberedBlob : compressedBlob;
   const { error } = await db.storage
     .from("parts-photos")
     .upload(path, photoBlob, {
@@ -371,7 +404,7 @@ $("uploadPhoto").onclick = async () => {
     return;
   }
 
-  message("saveMessage", `写真を非公開で保存したで！\n種類：${categoryLabel}\n${numberedBlob ? "管理番号入り" : "管理番号なし"}`);
+  message("saveMessage", `写真を非公開で保存したで！\n種類：${categoryLabel}\n${useNumberedPhoto ? "管理番号入り" : "管理番号なし"}`);
   loadParts();
 };
 
