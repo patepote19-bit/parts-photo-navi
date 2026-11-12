@@ -295,8 +295,38 @@ function startWakeListening() {
 function prepareVoiceEntry(spoken) {
   const text = spoken.trim().replace(/[。.!！?？]+$/g, "");
   if (!text) return;
-  const normalized = text.replace(/[\s　]+/g, "").toUpperCase();
-  const isPartId = /^[A-Z0-9][A-Z0-9_-]*$/.test(normalized);
+  const compact = text.replace(/[\s　、,。.!！?？:：]+/g, "");
+  const compactKana = compact.replace(/[\u30a1-\u30f6]/g, character => String.fromCharCode(character.charCodeAt(0) - 0x60));
+  const explicitPartId = /^(?:部品)?(?:管理番号|管番|番号|ぶひんかんりばんごう|かんりばんごう|かんばん)/i.test(compactKana);
+  let candidate = explicitPartId
+    ? compactKana.replace(/^(?:部品)?(?:管理番号|管番|番号|ぶひんかんりばんごう|かんりばんごう|かんばん)(?:は|が|を|の)?/i, "")
+    : compactKana;
+  candidate = candidate.replace(/^(?:は|が|を|の)/, "").replace(/(?:です|やで|やねん)$/, "");
+  let normalized = candidate.normalize("NFKC").toUpperCase();
+  let isPartId = /^[A-Z0-9][A-Z0-9_-]*$/.test(normalized);
+
+  if (!isPartId) {
+    const digitWords = [
+      ["ぜろ", "0"], ["れい", "0"], ["零", "0"], ["〇", "0"], ["まる", "0"], ["丸", "0"],
+      ["いち", "1"], ["一", "1"], ["に", "2"], ["二", "2"], ["さん", "3"], ["三", "3"],
+      ["よん", "4"], ["し", "4"], ["四", "4"], ["ご", "5"], ["五", "5"],
+      ["ろく", "6"], ["六", "6"], ["なな", "7"], ["しち", "7"], ["七", "7"],
+      ["はち", "8"], ["八", "8"], ["きゅう", "9"], ["く", "9"], ["九", "9"]
+    ].sort((a, b) => b[0].length - a[0].length);
+    let index = 0;
+    let digits = "";
+    while (index < candidate.length) {
+      const word = digitWords.find(([spokenDigit]) => candidate.startsWith(spokenDigit, index));
+      if (!word) break;
+      digits += word[1];
+      index += word[0].length;
+    }
+    if (index === candidate.length && digits) {
+      normalized = digits;
+      isPartId = true;
+    }
+  }
+
   pendingVoiceEntry = {
     field: isPartId ? "partId" : "partName",
     value: isPartId ? normalized : text
