@@ -46,7 +46,7 @@ label{display:block;margin:9px 0} .checks label{display:inline-block;margin-righ
 <input id="partId" placeholder="例：P00123">
 <label>部品名</label>
 <input id="partName" placeholder="例：セルモーター">
-<div id="voiceStatus" class="status">ログインして「さんぼう」って呼んでな。マイクの許可がいるで。</div>
+<div id="voiceStatus" class="status">ログインして「ナビ起動」って呼んでな。マイクの許可がいるで。</div>
 <label>写真を撮る・選ぶ</label>
 <input id="photo" type="file" accept="image/*" capture="environment">
 <div id="previewArea" hidden>
@@ -204,12 +204,12 @@ function startWakeListening() {
   wakeRecognition.interimResults = false;
   wakeRecognition.maxAlternatives = 1;
 
-  wakeRecognition.onstart = () => setVoiceStatus("「さんぼう」って呼んでな。呼びかけ後の言葉を聞き取るで。");
+  wakeRecognition.onstart = () => setVoiceStatus("「ナビ起動」って呼んでな。呼びかけ後の言葉を聞き取るで。");
   wakeRecognition.onresult = event => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (!event.results[i].isFinal) continue;
       const transcript = event.results[i][0].transcript.trim();
-      const wakePattern = /(さんぼう|サンボウ|三方|参謀)/i;
+      const wakePattern = /(ナビ[\s、,。]*起動|なび[\s、,。]*きどう)/i;
       const wakeMatch = wakePattern.exec(transcript);
 
       if (pendingVoiceEntry) {
@@ -255,7 +255,7 @@ function startWakeListening() {
   wakeRecognition.onerror = event => {
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       voiceUnavailable = true;
-      setVoiceStatus("マイクが許可されてへんで。ブラウザーのサイト設定でマイクを許可すると、「さんぼう」で使えるで。");
+      setVoiceStatus("マイクが許可されてへんで。ブラウザーのサイト設定でマイクを許可すると、「ナビ起動」で使えるで。");
     } else if (event.error !== "no-speech" && event.error !== "aborted") {
       setVoiceStatus("ん？なんて言うた？もう一回頼むわ！");
       speakReply("ん？なんて言うた？もう一回頼むわ！");
