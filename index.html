@@ -12,6 +12,7 @@ input,button{font-size:16px;box-sizing:border-box;width:100%;padding:13px;margin
 input{border:1px solid #bbb}button{border:0;background:#075ee8;color:white;font-weight:bold;cursor:pointer}
 button:disabled{background:#aaa}button.secondary{background:#586579}
 img{width:100%;height:auto;border-radius:8px;margin-top:10px}
+figure{margin:12px 0}figcaption{font-size:14px;color:#666;overflow-wrap:anywhere}
 small,.muted{color:#666}.status{padding:10px;border-radius:8px;background:#eef3fa;white-space:pre-wrap}
 .part{padding:10px 0;border-bottom:1px solid #eee}.part:last-child{border:0}
 label{display:block;margin:9px 0} .checks label{display:inline-block;margin-right:12px}
@@ -98,6 +99,9 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentUser = null;
 let compressedBlob = null;
 let numberedBlob = null;
+let previewUrl = null;
+let resultUrl = null;
+const galleryUrls = new Set();
 
 const $ = id => document.getElementById(id);
 
@@ -153,6 +157,8 @@ $("logoutButton").onclick = async () => {
   currentUser = null;
   $("appArea").hidden = true;
   $("authCard").hidden = false;
+  $("partsList").replaceChildren();
+  revokeGalleryUrls();
   message("authMessage", "ログアウトしました。");
 };
 
@@ -163,6 +169,10 @@ function resetPhotoResult() {
   $("resultArea").hidden = true;
   $("make").disabled = true;
   $("uploadPhoto").disabled = true;
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  if (resultUrl) URL.revokeObjectURL(resultUrl);
+  previewUrl = null;
+  resultUrl = null;
 }
 
 $("photo").onchange = async event => {
@@ -200,7 +210,8 @@ $("photo").onchange = async event => {
       }, "image/jpeg", 0.85);
     });
 
-    $("preview").src = URL.createObjectURL(compressedBlob);
+    previewUrl = URL.createObjectURL(compressedBlob);
+    $("preview").src = previewUrl;
     $("previewArea").hidden = false;
     $("compressionInfo").textContent =
       `${width}×${height}px ／ ${(file.size / 1024).toFixed(0)}KB → ${(compressedBlob.size / 1024).toFixed(0)}KB`;
@@ -223,12 +234,13 @@ $("make").onclick = async () => {
   }
 
   const img = new Image();
-  img.src = URL.createObjectURL(compressedBlob);
+  const sourceUrl = URL.createObjectURL(compressedBlob);
+  img.src = sourceUrl;
 
   await new Promise((resolve, reject) => {
     img.onload = resolve;
     img.onerror = reject;
-  });
+  }).finally(() => URL.revokeObjectURL(sourceUrl));
 
   const canvas = $("canvas");
   canvas.width = img.naturalWidth;
@@ -250,11 +262,13 @@ $("make").onclick = async () => {
   ctx.textBaseline = "top";
   ctx.fillText(partId, padding, padding);
 
-  numberedBlob = await new Promise(resolve =>
-    canvas.toBlob(resolve, "image/jpeg", 0.9)
+  numberedBlob = await new Promise((resolve, reject) =>
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("番号入り写真を作れませんでした")), "image/jpeg", 0.9)
   );
 
-  $("result").src = URL.createObjectURL(numberedBlob);
+  if (resultUrl) URL.revokeObjectURL(resultUrl);
+  resultUrl = URL.createObjectURL(numberedBlob);
+  $("result").src = resultUrl;
   $("resultArea").hidden = false;
 };
 
@@ -283,18 +297,36 @@ $("savePart").onclick = async () => {
 
   message("saveMessage", "部品データを保存中...");
 
-  const { error } = await db.from("parts").upsert({
-    part_id: partId,
-    part_name: partName || null,
-    status: "未撮影"
-  }, { onConflict: "part_id" });
+  const { data: existing, error: lookupError } = await db.from("parts")
+    .select("part_id")
+    .eq("part_id", partId)
+    .maybeSingle();
+
+  if (lookupError) {
+    message("saveMessage", "既存データを確認できませんでした。保存は行っていません：" + lookupError.message);
+    return;
+  }
+
+  const saveResult = existing
+    ? (partName
+        ? await db.from("parts").update({ part_name: partName }).eq("part_id", partId)
+        : { error: null })
+    : await db.from("parts").insert({
+        part_id: partId,
+        part_name: partName || null,
+        status: "未撮影"
+      });
+
+  const { error } = saveResult;
 
   if (error) {
     message("saveMessage", "保存エラー：" + error.message);
     return;
   }
 
-  message("saveMessage", "部品データを保存したで。");
+  message("saveMessage", existing
+    ? (partName ? "部品名を更新したで。撮影状態はそのままやで。" : "この部品番号は登録済みやで。既存データは変更してへん。")
+    : "部品データを保存したで。");
   loadParts();
 };
 
@@ -312,20 +344,18 @@ $("uploadPhoto").onclick = async () => {
     document.querySelectorAll(".photoCheck:checked")
   ).map(el => el.value);
 
-const suffix = category.length
-  ? "photo_" + category.length
-  : "photo";
-
-const filename = `${Date.now()}_photo.jpg`;
-const path = `${currentUser.id}/${partId}/${filename}`;
+  const categoryLabel = category.length ? category.join("_") : "未分類";
+  const filename = `${Date.now()}_${categoryLabel}.jpg`;
+  const path = `${currentUser.id}/${partId}/${filename}`;
 
   message("saveMessage", "写真をクラウドへアップロード中...");
 
   $("uploadPhoto").disabled = true;
 
+  const photoBlob = numberedBlob || compressedBlob;
   const { error } = await db.storage
     .from("parts-photos")
-    .upload(path, compressedBlob, {
+    .upload(path, photoBlob, {
       contentType: "image/jpeg",
       upsert: false
     });
@@ -337,12 +367,14 @@ const path = `${currentUser.id}/${partId}/${filename}`;
     return;
   }
 
-  message("saveMessage", "写真をクラウドに保存したで！\n保存先：" + path);
+  message("saveMessage", `写真を非公開で保存したで！\n種類：${categoryLabel}\n${numberedBlob ? "管理番号入り" : "管理番号なし"}`);
+  loadParts();
 };
 
 async function loadParts() {
   if (!currentUser) return;
 
+  revokeGalleryUrls();
   message("partsList", "読み込み中...");
 
   const { data, error } = await db.from("parts")
@@ -372,9 +404,73 @@ async function loadParts() {
     detail.textContent =
       `${part.part_name || "名称未入力"} ／ ${part.status || "状態未設定"}`;
 
-    div.append(strong, detail);
+    const photoButton = document.createElement("button");
+    photoButton.type = "button";
+    photoButton.className = "secondary";
+    photoButton.textContent = "自分が保存した写真を見る";
+    const photoArea = document.createElement("div");
+    photoArea.hidden = true;
+    let partPhotoUrls = [];
+    photoButton.onclick = async () => {
+      partPhotoUrls.forEach(url => {
+        URL.revokeObjectURL(url);
+        galleryUrls.delete(url);
+      });
+      partPhotoUrls = [];
+      photoArea.hidden = false;
+      photoArea.replaceChildren();
+      photoArea.textContent = "写真を読み込み中...";
+      const folder = `${currentUser.id}/${part.part_id}`;
+      const { data: files, error: listError } = await db.storage
+        .from("parts-photos")
+        .list(folder, { limit: 100, sortBy: { column: "name", order: "desc" } });
+
+      if (listError) {
+        photoArea.textContent = "写真を読み込めませんでした：" + listError.message;
+        return;
+      }
+
+      const photos = (files || []).filter(file => file.id !== null && file.name && !file.name.startsWith("."));
+      if (!photos.length) {
+        photoArea.textContent = "この部品の写真はまだないで。";
+        return;
+      }
+
+      photoArea.replaceChildren();
+      for (const file of photos) {
+        const filePath = `${folder}/${file.name}`;
+        const { data: photoBlob, error: downloadError } = await db.storage
+          .from("parts-photos")
+          .download(filePath);
+        if (downloadError || !photoBlob) continue;
+
+        const figure = document.createElement("figure");
+        const image = document.createElement("img");
+        image.loading = "lazy";
+        const photoUrl = URL.createObjectURL(photoBlob);
+        partPhotoUrls.push(photoUrl);
+        galleryUrls.add(photoUrl);
+        image.src = photoUrl;
+        image.alt = `${part.part_id} の写真 ${file.name}`;
+        const caption = document.createElement("figcaption");
+        caption.textContent = file.name.replace(/^\d+_/, "").replace(/\.jpg$/i, "");
+        figure.append(image, caption);
+        photoArea.appendChild(figure);
+      }
+
+      if (!photoArea.childElementCount) {
+        photoArea.textContent = "写真リンクを作れませんでした。ログイン状態と閲覧権限を確認してな。";
+      }
+    };
+
+    div.append(strong, detail, photoButton, photoArea);
     $("partsList").appendChild(div);
   });
+}
+
+function revokeGalleryUrls() {
+  galleryUrls.forEach(url => URL.revokeObjectURL(url));
+  galleryUrls.clear();
 }
 
 $("reloadParts").onclick = loadParts;
