@@ -46,6 +46,7 @@ label{display:block;margin:9px 0} .checks label{display:inline-block;margin-righ
 <input id="partId" placeholder="例：P00123">
 <label>部品名</label>
 <input id="partName" placeholder="例：セルモーター">
+<div id="voiceStatus" class="status">ログイン後、「さんぼう」と呼ぶと、その後の言葉を番号か部品名に入力するで。マイク許可が必要や。</div>
 <label>写真を撮る・選ぶ</label>
 <input id="photo" type="file" accept="image/*" capture="environment">
 <div id="previewArea" hidden>
@@ -66,7 +67,7 @@ label{display:block;margin:9px 0} .checks label{display:inline-block;margin-righ
 
 <div class="card">
 <h3>番号入り写真を作る</h3>
-<p><small>管理番号を写真の左上に合成するで。</small></p>
+<p><small>保存する写真には管理番号を左上に必ず入れるで。最初の1枚だけ番号の帯の色を変える。</small></p>
 <button id="make" disabled>番号を写真に入れる</button>
 <div id="resultArea" hidden>
 <img id="result" alt="番号入り写真">
@@ -103,6 +104,12 @@ let numberedForPartId = null;
 let previewUrl = null;
 let resultUrl = null;
 const galleryUrls = new Set();
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let wakeRecognition = null;
+let voiceArmedUntil = 0;
+let voiceUnavailable = false;
+let voiceSpeaking = false;
+let pendingVoiceEntry = null;
 
 const $ = id => document.getElementById(id);
 
@@ -110,11 +117,121 @@ function message(id, text) {
   $(id).textContent = text;
 }
 
+function setVoiceStatus(text) {
+  if ($("voiceStatus")) $("voiceStatus").textContent = text;
+}
+
+function speakReply(text) {
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  voiceSpeaking = true;
+  if (wakeRecognition) wakeRecognition.stop();
+  window.speechSynthesis.cancel();
+  const reply = new SpeechSynthesisUtterance(text);
+  reply.lang = "ja-JP";
+  reply.onend = reply.onerror = () => {
+    voiceSpeaking = false;
+    if (currentUser && !voiceUnavailable) setTimeout(startWakeListening, 500);
+  };
+  window.speechSynthesis.speak(reply);
+}
+
+function speakAcknowledgement() {
+  speakReply("はいよ");
+}
+
+function startWakeListening() {
+  if (!currentUser || voiceUnavailable) return;
+  if (!SpeechRecognition) {
+    setVoiceStatus("このブラウザーは呼びかけ音声に対応してへんみたいや。ChromeかEdgeで開いてな。");
+    voiceUnavailable = true;
+    return;
+  }
+
+  wakeRecognition = new SpeechRecognition();
+  wakeRecognition.lang = "ja-JP";
+  wakeRecognition.continuous = true;
+  wakeRecognition.interimResults = false;
+  wakeRecognition.maxAlternatives = 1;
+
+  wakeRecognition.onstart = () => setVoiceStatus("「さんぼう」って呼んでな。呼びかけ後の言葉を聞き取るで。");
+  wakeRecognition.onresult = event => {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (!event.results[i].isFinal) continue;
+      const transcript = event.results[i][0].transcript.trim();
+      const wakePattern = /(さんぼう|サンボウ|三方|参謀)/i;
+      const wakeMatch = wakePattern.exec(transcript);
+
+      if (pendingVoiceEntry) {
+        const confirmation = transcript.replace(/[\s　。.!！?？]+/g, "");
+        if (/^(おっけー|オッケー|ok|はい|そう|正解)/i.test(confirmation)) {
+          applyVoiceEntry(pendingVoiceEntry);
+          pendingVoiceEntry = null;
+          voiceArmedUntil = 0;
+          speakReply("入力したで");
+        } else if (/^(違う|ちがう|ちゃう|いいえ|修正)/i.test(confirmation)) {
+          pendingVoiceEntry = null;
+          voiceArmedUntil = Date.now() + 15000;
+          speakReply("わかった。もう一回言ってな");
+        }
+        continue;
+      }
+
+      if (wakeMatch) {
+        voiceArmedUntil = Date.now() + 10000;
+        speakAcknowledgement();
+        const remainder = transcript.slice(wakeMatch.index + wakeMatch[0].length).trim();
+        if (remainder) prepareVoiceEntry(remainder);
+        else setVoiceStatus("聞いてるで。管理番号か部品名を言ってな。");
+      } else if (Date.now() < voiceArmedUntil) {
+        prepareVoiceEntry(transcript);
+      }
+    }
+  };
+  wakeRecognition.onerror = event => {
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      voiceUnavailable = true;
+      setVoiceStatus("マイクが許可されてへんで。ブラウザーのサイト設定でマイクを許可すると、「さんぼう」で使えるで。");
+    } else if (event.error !== "no-speech" && event.error !== "aborted") {
+      setVoiceStatus("音声を聞き取れへんかった。通信とマイクを確認してな。");
+    }
+  };
+  wakeRecognition.onend = () => {
+    if (currentUser && !voiceUnavailable && !voiceSpeaking) setTimeout(startWakeListening, 700);
+  };
+  try {
+    wakeRecognition.start();
+  } catch (error) {
+    setTimeout(startWakeListening, 1000);
+  }
+}
+
+function prepareVoiceEntry(spoken) {
+  const text = spoken.trim().replace(/[。.!！?？]+$/g, "");
+  if (!text) return;
+  const normalized = text.replace(/[\s　]+/g, "").toUpperCase();
+  const isPartId = /^[A-Z0-9][A-Z0-9_-]*$/.test(normalized);
+  pendingVoiceEntry = {
+    field: isPartId ? "partId" : "partName",
+    value: isPartId ? normalized : text
+  };
+  voiceArmedUntil = Date.now() + 15000;
+  setVoiceStatus(`${isPartId ? "管理番号" : "部品名"}は「${pendingVoiceEntry.value}」で、おっけーか？`);
+  speakReply(`${isPartId ? "管理番号" : "部品名"}は、${pendingVoiceEntry.value}で、おっけーか？`);
+}
+
+function applyVoiceEntry(entry) {
+  const target = $(entry.field);
+  target.value = entry.value;
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+  setVoiceStatus(`${entry.field === "partId" ? "管理番号" : "部品名"}を入力したで。内容を確認してな。`);
+}
+
 function showApp(user) {
   currentUser = user;
   $("authCard").hidden = true;
   $("appArea").hidden = false;
   $("userLabel").textContent = user.email || user.id;
+  startWakeListening();
   loadParts();
 }
 
@@ -158,8 +275,15 @@ $("loginButton").onclick = async () => {
 };
 
 $("logoutButton").onclick = async () => {
-  await db.auth.signOut();
   currentUser = null;
+  voiceArmedUntil = 0;
+  pendingVoiceEntry = null;
+  if (wakeRecognition) {
+    wakeRecognition.onend = null;
+    wakeRecognition.stop();
+    wakeRecognition = null;
+  }
+  await db.auth.signOut();
   $("appArea").hidden = true;
   $("authCard").hidden = false;
   $("partsList").replaceChildren();
@@ -230,17 +354,9 @@ $("photo").onchange = async event => {
   }
 };
 
-$("make").onclick = async () => {
-  if (!compressedBlob) return;
-
-  const partId = $("partId").value.trim();
-  if (!partId) {
-    message("saveMessage", "先に部品管理番号を入力してな。");
-    return;
-  }
-
+async function createNumberedPhoto(sourceBlob, partId, isFirstPhoto = false) {
   const img = new Image();
-  const sourceUrl = URL.createObjectURL(compressedBlob);
+  const sourceUrl = URL.createObjectURL(sourceBlob);
   img.src = sourceUrl;
 
   await new Promise((resolve, reject) => {
@@ -261,16 +377,33 @@ $("make").onclick = async () => {
   ctx.font = `bold ${fontSize}px sans-serif`;
   const textWidth = ctx.measureText(partId).width;
 
-  ctx.fillStyle = "rgba(0,0,0,0.72)";
+  ctx.fillStyle = isFirstPhoto ? "rgba(220,53,69,0.92)" : "rgba(0,0,0,0.72)";
   ctx.fillRect(0, 0, textWidth + padding * 2, fontSize + padding * 2);
 
   ctx.fillStyle = "#fff";
   ctx.textBaseline = "top";
   ctx.fillText(partId, padding, padding);
 
-  numberedBlob = await new Promise((resolve, reject) =>
+  return new Promise((resolve, reject) =>
     canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("番号入り写真を作れませんでした")), "image/jpeg", 0.9)
   );
+}
+
+$("make").onclick = async () => {
+  if (!compressedBlob) return;
+
+  const partId = $("partId").value.trim();
+  if (!partId) {
+    message("saveMessage", "先に部品管理番号を入力してな。");
+    return;
+  }
+
+  try {
+    numberedBlob = await createNumberedPhoto(compressedBlob, partId);
+  } catch (error) {
+    message("saveMessage", "写真処理エラー：" + error.message);
+    return;
+  }
   numberedForPartId = partId;
 
   if (resultUrl) URL.revokeObjectURL(resultUrl);
@@ -388,8 +521,25 @@ $("uploadPhoto").onclick = async () => {
 
   $("uploadPhoto").disabled = true;
 
-  const useNumberedPhoto = Boolean(numberedBlob && numberedForPartId === partId);
-  const photoBlob = useNumberedPhoto ? numberedBlob : compressedBlob;
+  const { data: existingPhotos, error: listError } = await db.storage
+    .from("parts-photos")
+    .list(`${currentUser.id}/${partId}`, { limit: 1000 });
+
+  if (listError) {
+    $("uploadPhoto").disabled = false;
+    message("saveMessage", "既存写真を確認できず、今回は保存してへん。番号を必ず入れるため、確認後にもう一度試してな。");
+    return;
+  }
+
+  const isFirstPhoto = !existingPhotos || existingPhotos.length === 0;
+  let photoBlob;
+  try {
+    photoBlob = await createNumberedPhoto(compressedBlob, partId, isFirstPhoto);
+  } catch (error) {
+    $("uploadPhoto").disabled = false;
+    message("saveMessage", "管理番号を写真に入れられず、保存してへん：" + error.message);
+    return;
+  }
   const { error } = await db.storage
     .from("parts-photos")
     .upload(path, photoBlob, {
@@ -404,7 +554,7 @@ $("uploadPhoto").onclick = async () => {
     return;
   }
 
-  message("saveMessage", `写真を非公開で保存したで！\n種類：${categoryLabel}\n${useNumberedPhoto ? "管理番号入り" : "管理番号なし"}`);
+  message("saveMessage", `管理番号入りの写真を非公開で保存したで！\n種類：${categoryLabel}\n${isFirstPhoto ? "先頭の1枚（色付き）" : "2枚目以降"}`);
   loadParts();
 };
 
