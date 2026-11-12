@@ -222,7 +222,20 @@ function startWakeListening() {
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
 
-  recognition.onstart = () => setVoiceStatus("「ナビ起動」って呼んでな。呼びかけ後の言葉を聞き取るで。");
+  recognition.onstart = () => {
+    if (pendingVoiceEntry?.action === "complete") {
+      setVoiceStatus("もう終わりでええんか？「おっけー」で確定するで。");
+    } else if (pendingVoiceEntry) {
+      const heard = pendingVoiceEntry.field === "partId"
+        ? `管番${pendingVoiceEntry.value}`
+        : pendingVoiceEntry.value;
+      setVoiceStatus(`${heard}やな？合ってたら「おっけー」って言うてな。`);
+    } else if (Date.now() < voiceArmedUntil) {
+      setVoiceStatus("聞いてるで。管番か品名を言うてな。");
+    } else {
+      setVoiceStatus("「ナビ起動」って呼んでな。呼びかけ後の言葉を聞き取るで。");
+    }
+  };
   recognition.onresult = event => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (!event.results[i].isFinal) continue;
@@ -231,8 +244,8 @@ function startWakeListening() {
       const wakeMatch = wakePattern.exec(transcript);
 
       if (pendingVoiceEntry) {
-        const confirmation = transcript.replace(/[\s　。.!！?？]+/g, "");
-        if (/^(おっけー|オッケー|ok|はい|そう|正解)/i.test(confirmation)) {
+        const confirmation = transcript.replace(/[\s　。.!！?？]+/g, "").normalize("NFKC");
+        if (/^(おっけー|オッケー|おーけー|オーケー|オーケイ|ok(?:ay)?|はい|うん|そう|正解|ええよ|いいよ|合ってる|間違いない)/i.test(confirmation)) {
           const acceptedEntry = pendingVoiceEntry;
           pendingVoiceEntry = null;
           voiceArmedUntil = 0;
@@ -243,7 +256,7 @@ function startWakeListening() {
             applyVoiceEntry(acceptedEntry);
             speakReply(acceptedEntry.field === "partId" ? "よっしゃ、番号よし！" : "おっしゃ、品名よし！");
           }
-        } else if (/^(違う|ちがう|ちゃう|いいえ|修正)/i.test(confirmation)) {
+        } else if (/^(違う|ちがう|ちゃう|いいえ|修正|間違い)/i.test(confirmation)) {
           pendingVoiceEntry = null;
           voiceArmedUntil = Date.now() + 15000;
           speakReply("ん？なんて言うた？もう一回頼むわ！");
