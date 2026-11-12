@@ -46,7 +46,7 @@ label{display:block;margin:9px 0} .checks label{display:inline-block;margin-righ
 <input id="partId" placeholder="例：P00123">
 <label>部品名</label>
 <input id="partName" placeholder="例：セルモーター">
-<div id="voiceStatus" class="status">ログイン後、「さんぼう」と呼ぶと、その後の言葉を番号か部品名に入力するで。マイク許可が必要や。</div>
+<div id="voiceStatus" class="status">ログインして「さんぼう」って呼んでな。マイクの許可がいるで。</div>
 <label>写真を撮る・選ぶ</label>
 <input id="photo" type="file" accept="image/*" capture="environment">
 <div id="previewArea" hidden>
@@ -110,6 +110,10 @@ let voiceArmedUntil = 0;
 let voiceUnavailable = false;
 let voiceSpeaking = false;
 let pendingVoiceEntry = null;
+let photoCountForPartId = null;
+let knownPhotoCount = null;
+let photoCountTimer = null;
+let lastPhotoQuip = "";
 
 const $ = id => document.getElementById(id);
 
@@ -128,6 +132,11 @@ function speakReply(text) {
   window.speechSynthesis.cancel();
   const reply = new SpeechSynthesisUtterance(text);
   reply.lang = "ja-JP";
+  const japaneseVoices = window.speechSynthesis.getVoices()
+    .filter(voice => voice.lang.toLowerCase().startsWith("ja"));
+  reply.voice = japaneseVoices.find(voice => /(male|男性|ichiro|keita|daisuke|shota|takumi)/i.test(voice.name))
+    || japaneseVoices[0]
+    || null;
   reply.onend = reply.onerror = () => {
     voiceSpeaking = false;
     if (currentUser && !voiceUnavailable) setTimeout(startWakeListening, 500);
@@ -137,6 +146,48 @@ function speakReply(text) {
 
 function speakAcknowledgement() {
   speakReply("はいよ");
+}
+
+function photoQuip(number) {
+  const setLines = {
+    1: "ほな、1枚目いくでー！",
+    2: "よっしゃ、次いこか！",
+    3: "ええ感じやでー！",
+    4: "もうちょいやな！",
+    5: "まだ撮るんかー？",
+    6: "6枚目やで！まだあるんかいなー！",
+    7: "おっ、まだ続くんか！",
+    8: "8枚目やで！もうええやろー！",
+    9: "まだいくんかい！",
+    10: "10枚目やで！撮りすぎやってー！",
+    11: "まだ撮るんかいなー！",
+    12: "もう12枚やで！堪忍して〜やー！"
+  };
+  if (setLines[number]) return setLines[number];
+
+  const extraLines = [
+    `${number}枚目やでー！おっちゃん、最後まで付き合うで！`,
+    `まだまだいくんかー！ほな、次いこか！`,
+    `ええで、何枚でもいこかー！`,
+    `おっ、まだ続くんやな！撮影は止めへんでー！`
+  ].filter(line => line !== lastPhotoQuip);
+  return extraLines[Math.floor(Math.random() * extraLines.length)];
+}
+
+function queuePhotoCountLookup() {
+  const partId = $("partId").value.trim();
+  photoCountForPartId = partId;
+  knownPhotoCount = null;
+  clearTimeout(photoCountTimer);
+  if (!currentUser || !partId) return;
+
+  photoCountTimer = setTimeout(async () => {
+    const { data, error } = await db.storage
+      .from("parts-photos")
+      .list(`${currentUser.id}/${partId}`, { limit: 1000 });
+    if (error || photoCountForPartId !== partId || !currentUser) return;
+    knownPhotoCount = (data || []).filter(file => file.id !== null && file.name && !file.name.startsWith(".")).length;
+  }, 400);
 }
 
 function startWakeListening() {
@@ -164,14 +215,22 @@ function startWakeListening() {
       if (pendingVoiceEntry) {
         const confirmation = transcript.replace(/[\s　。.!！?？]+/g, "");
         if (/^(おっけー|オッケー|ok|はい|そう|正解)/i.test(confirmation)) {
-          applyVoiceEntry(pendingVoiceEntry);
+          const acceptedEntry = pendingVoiceEntry;
           pendingVoiceEntry = null;
           voiceArmedUntil = 0;
-          speakReply("入力したで");
+          if (acceptedEntry.action === "complete") {
+            setVoiceStatus("よっしゃ！これで完了や！お疲れさん！");
+            speakReply("よっしゃ！これで完了や！お疲れさん！");
+          } else {
+            applyVoiceEntry(acceptedEntry);
+            speakReply(acceptedEntry.field === "partId" ? "よっしゃ、番号よし！" : "おっしゃ、品名よし！");
+          }
         } else if (/^(違う|ちがう|ちゃう|いいえ|修正)/i.test(confirmation)) {
           pendingVoiceEntry = null;
           voiceArmedUntil = Date.now() + 15000;
-          speakReply("わかった。もう一回言ってな");
+          speakReply("ん？なんて言うた？もう一回頼むわ！");
+        } else {
+          speakReply("ん？なんて言うた？もう一回頼むわ！");
         }
         continue;
       }
@@ -180,10 +239,16 @@ function startWakeListening() {
         voiceArmedUntil = Date.now() + 10000;
         speakAcknowledgement();
         const remainder = transcript.slice(wakeMatch.index + wakeMatch[0].length).trim();
-        if (remainder) prepareVoiceEntry(remainder);
-        else setVoiceStatus("聞いてるで。管理番号か部品名を言ってな。");
+        if (/^(完了|おわり|終わり|終了)/.test(remainder.replace(/[\s　。.!！?？]+/g, ""))) {
+          prepareCompletionConfirmation();
+        } else if (remainder) prepareVoiceEntry(remainder);
+        else setVoiceStatus("聞いてるで。管番か品名、言うてな。");
       } else if (Date.now() < voiceArmedUntil) {
-        prepareVoiceEntry(transcript);
+        if (/^(完了|おわり|終わり|終了)/.test(transcript.replace(/[\s　。.!！?？]+/g, ""))) {
+          prepareCompletionConfirmation();
+        } else {
+          prepareVoiceEntry(transcript);
+        }
       }
     }
   };
@@ -192,7 +257,8 @@ function startWakeListening() {
       voiceUnavailable = true;
       setVoiceStatus("マイクが許可されてへんで。ブラウザーのサイト設定でマイクを許可すると、「さんぼう」で使えるで。");
     } else if (event.error !== "no-speech" && event.error !== "aborted") {
-      setVoiceStatus("音声を聞き取れへんかった。通信とマイクを確認してな。");
+      setVoiceStatus("ん？なんて言うた？もう一回頼むわ！");
+      speakReply("ん？なんて言うた？もう一回頼むわ！");
     }
   };
   wakeRecognition.onend = () => {
@@ -215,15 +281,26 @@ function prepareVoiceEntry(spoken) {
     value: isPartId ? normalized : text
   };
   voiceArmedUntil = Date.now() + 15000;
-  setVoiceStatus(`${isPartId ? "管理番号" : "部品名"}は「${pendingVoiceEntry.value}」で、おっけーか？`);
-  speakReply(`${isPartId ? "管理番号" : "部品名"}は、${pendingVoiceEntry.value}で、おっけーか？`);
+  setVoiceStatus(isPartId
+    ? `管番${pendingVoiceEntry.value}やな？ええか？`
+    : `${pendingVoiceEntry.value}やな？間違いないか？`);
+  speakReply(isPartId
+    ? `管番${pendingVoiceEntry.value}やな？ええか？`
+    : `${pendingVoiceEntry.value}やな？間違いないか？`);
+}
+
+function prepareCompletionConfirmation() {
+  pendingVoiceEntry = { action: "complete" };
+  voiceArmedUntil = Date.now() + 15000;
+  setVoiceStatus("もう終わりでええんか？");
+  speakReply("もう終わりでええんか？");
 }
 
 function applyVoiceEntry(entry) {
   const target = $(entry.field);
   target.value = entry.value;
   target.dispatchEvent(new Event("input", { bubbles: true }));
-  setVoiceStatus(`${entry.field === "partId" ? "管理番号" : "部品名"}を入力したで。内容を確認してな。`);
+  setVoiceStatus(entry.field === "partId" ? "よっしゃ、番号よし！" : "おっしゃ、品名よし！");
 }
 
 function showApp(user) {
@@ -232,6 +309,8 @@ function showApp(user) {
   $("appArea").hidden = false;
   $("userLabel").textContent = user.email || user.id;
   startWakeListening();
+  speakReply("おう！今日もやろかー！");
+  queuePhotoCountLookup();
   loadParts();
 }
 
@@ -278,6 +357,9 @@ $("logoutButton").onclick = async () => {
   currentUser = null;
   voiceArmedUntil = 0;
   pendingVoiceEntry = null;
+  photoCountForPartId = null;
+  knownPhotoCount = null;
+  clearTimeout(photoCountTimer);
   if (wakeRecognition) {
     wakeRecognition.onend = null;
     wakeRecognition.stop();
@@ -304,6 +386,15 @@ function resetPhotoResult() {
   previewUrl = null;
   resultUrl = null;
 }
+
+$("photo").onclick = () => {
+  const partId = $("partId").value.trim();
+  const line = partId && photoCountForPartId === partId && knownPhotoCount !== null
+    ? photoQuip(knownPhotoCount + 1)
+    : "ほな、写真いこかー！";
+  lastPhotoQuip = line;
+  speakReply(line);
+};
 
 $("photo").onchange = async event => {
   resetPhotoResult();
@@ -348,9 +439,11 @@ $("photo").onchange = async event => {
 
     $("make").disabled = false;
     $("uploadPhoto").disabled = false;
-    message("saveMessage", "圧縮完了。部品番号を確認してな。");
+    message("saveMessage", "よっしゃー！撮れたで！番号と写真を確認してな。");
+    speakReply("よっしゃー！撮れたで！");
   } catch (error) {
-    message("saveMessage", "写真処理エラー：" + error.message);
+    message("saveMessage", "あかん、うまいこと撮れてへんわ。もう一回な！");
+    speakReply("あかん、うまいこと撮れてへんわ。もう一回な！");
   }
 };
 
@@ -401,7 +494,8 @@ $("make").onclick = async () => {
   try {
     numberedBlob = await createNumberedPhoto(compressedBlob, partId);
   } catch (error) {
-    message("saveMessage", "写真処理エラー：" + error.message);
+    message("saveMessage", "あかん、うまいこと写真に番号が入らへんわ。もう一回な！");
+    speakReply("あかん、うまいこと写真に番号が入らへんわ。もう一回な！");
     return;
   }
   numberedForPartId = partId;
@@ -413,6 +507,7 @@ $("make").onclick = async () => {
 };
 
 $("partId").addEventListener("input", () => {
+  queuePhotoCountLookup();
   if (!numberedBlob || numberedForPartId === $("partId").value.trim()) return;
   numberedBlob = null;
   numberedForPartId = null;
@@ -528,16 +623,20 @@ $("uploadPhoto").onclick = async () => {
   if (listError) {
     $("uploadPhoto").disabled = false;
     message("saveMessage", "既存写真を確認できず、今回は保存してへん。番号を必ず入れるため、確認後にもう一度試してな。");
+    speakReply("あかん、前の写真を確認できへんかったわ。今回は保存してへんで。");
     return;
   }
 
-  const isFirstPhoto = !existingPhotos || existingPhotos.length === 0;
+  const existingPhotoCount = (existingPhotos || [])
+    .filter(file => file.id !== null && file.name && !file.name.startsWith(".")).length;
+  const isFirstPhoto = existingPhotoCount === 0;
   let photoBlob;
   try {
     photoBlob = await createNumberedPhoto(compressedBlob, partId, isFirstPhoto);
   } catch (error) {
     $("uploadPhoto").disabled = false;
     message("saveMessage", "管理番号を写真に入れられず、保存してへん：" + error.message);
+    speakReply("あかん、番号を写真に入れられへんかったわ。保存してへんで。");
     return;
   }
   const { error } = await db.storage
@@ -551,10 +650,14 @@ $("uploadPhoto").onclick = async () => {
 
   if (error) {
     message("saveMessage", "写真保存エラー：" + error.message);
+    speakReply("あかん、写真を保存できてへんわ。もう一回頼むで！");
     return;
   }
 
-  message("saveMessage", `管理番号入りの写真を非公開で保存したで！\n種類：${categoryLabel}\n${isFirstPhoto ? "先頭の1枚（色付き）" : "2枚目以降"}`);
+  photoCountForPartId = partId;
+  knownPhotoCount = existingPhotoCount + 1;
+  message("saveMessage", `よっしゃ、写真は保存できたで！\n種類：${categoryLabel}\n${isFirstPhoto ? "先頭の1枚（色付き）" : `${knownPhotoCount}枚目`}`);
+  speakReply("よっしゃ、写真は保存できたで！次も撮るならいこか！");
   loadParts();
 };
 
